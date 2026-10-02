@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Единая точка входа</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+    <h1>Учебная единая точка входа</h1>
+    <p>Введите данные пользователя, чтобы выдать приложению одноразовый код OAuth2.</p>
+    <section>
+        <form action="/oauth/provider/authorize" method="post">
+            <input name="client_id" type="hidden" value="{{ client_id }}">
+            <input name="redirect_uri" type="hidden" value="{{ redirect_uri }}">
+            <input name="state" type="hidden" value="{{ state }}">
+            <input name="login" placeholder="Логин" autocomplete="username" required>
+            <input name="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+            <button>Войти</button>
+        </form>
+    </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: auth_practice
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-auth_demo_password}
+    ports:
+      - "5433:5432"
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d auth_practice"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  auth_postgres_data:
+

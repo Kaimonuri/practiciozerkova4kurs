@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Практика по аутентификации</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+    <h1>Аутентификация и авторизация</h1>
+    <p>Практическая работа. Аньшин Сергей, ИСП-406.</p>
+    <p>Тестовый пользователь: <strong>demo</strong>, пароль: <strong>Demo12345</strong>.</p>
+
+    <section>
+        <h2>Регистрация</h2>
+        <form data-endpoint="/register">
+            <input name="login" placeholder="Логин" value="student">
+            <input name="email" placeholder="Электронная почта" value="student@example.ru">
+            <input name="password" type="password" placeholder="Пароль" value="Student123">
+            <button>Зарегистрироваться</button>
+        </form>
+    </section>
+
+    <section>
+        <h2>Вход через cookie</h2>
+        <form data-endpoint="/auth/cookie/login">
+            <input name="login" value="demo">
+            <input name="password" type="password" value="Demo12345">
+            <button>Войти</button>
+        </form>
+        <a href="/auth/cookie/profile">Проверить профиль</a>
+    </section>
+
+    <section>
+        <h2>Серверная сессия</h2>
+        <form data-endpoint="/auth/session/login">
+            <input name="login" value="demo">
+            <input name="password" type="password" value="Demo12345">
+            <button>Создать сессию</button>
+        </form>
+        <a href="/auth/session/profile">Проверить сессию</a>
+    </section>
+
+    <section>
+        <h2>Беспарольный вход</h2>
+        <form data-endpoint="/auth/passwordless/request">
+            <input name="email" type="email" value="demo@example.ru">
+            <button>Получить ссылку</button>
+        </form>
+    </section>
+
+    <section>
+        <h2>JWT access и refresh</h2>
+        <form data-endpoint="/auth/jwt/login">
+            <input name="login" value="demo">
+            <input name="password" type="password" value="Demo12345">
+            <button>Получить токены</button>
+        </form>
+    </section>
+
+    <section>
+        <h2>OAuth2</h2>
+        <p><a class="button" href="/oauth/start">Войти через учебную единую точку</a></p>
+    </section>
+
+    <section>
+        <h2>PASETO v4.local</h2>
+        <form data-endpoint="/auth/paseto/login">
+            <input name="login" value="demo">
+            <input name="password" type="password" value="Demo12345">
+            <button>Получить PASETO</button>
+        </form>
+    </section>
+
+    <section class="result">
+        <h2>Результат запроса</h2>
+        <pre id="result">Выберите способ аутентификации.</pre>
+    </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
+
