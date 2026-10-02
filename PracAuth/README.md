@@ -11,12 +11,13 @@
 Copy-Item .env.example .env
 docker compose up -d
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python app.py
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe app.py
 ```
 
 Открыть `http://127.0.0.1:8001`.
+
+Для проверки в другом окне PowerShell выполните `.\.venv\Scripts\python.exe test_auth.py`. Значения пароля в `.env.example` предназначены только для локальной демонстрации; для собственного запуска задайте отдельный пароль одновременно в `POSTGRES_PASSWORD` и `DATABASE_URL` до создания контейнера.
 
 Тестовый пользователь:
 
