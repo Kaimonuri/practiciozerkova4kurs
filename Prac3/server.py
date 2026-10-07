@@ -26,6 +26,7 @@ if ENV_FILE.exists():
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8000"))
 DATABASE_URL = os.environ.get("DATABASE_URL")
+DB_HOST = os.environ.get("DB_HOST")
 HTTPS = os.environ.get("HTTPS", "0") == "1"
 COOKIE_NAME = "__Host-session" if HTTPS else "session"
 SERVICES = {"Поддерживающая уборка", "Генеральная уборка", "Уборка после ремонта"}
@@ -37,6 +38,14 @@ PHONE_RE = re.compile(r"^8\(\d{3}\)\d{3}-\d{2}-\d{2}$")
 
 
 def db():
+    if DB_HOST:
+        return psycopg.connect(
+            host=DB_HOST,
+            port=int(os.environ.get("DB_PORT", "5432")),
+            dbname=os.environ.get("DB_NAME", "cleaning"),
+            user=os.environ.get("DB_USER", "cleaning"),
+            password=os.environ.get("DB_PASSWORD"),
+        )
     return psycopg.connect(DATABASE_URL)
 
 
@@ -332,8 +341,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    if not DATABASE_URL:
-        raise SystemExit("Set DATABASE_URL for PostgreSQL connection")
+    if not DATABASE_URL and not DB_HOST:
+        raise SystemExit("Set DATABASE_URL or DB_HOST for PostgreSQL connection")
     init_db()
     print(f"Open http://{HOST}:{PORT}")
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

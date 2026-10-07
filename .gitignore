@@ -4,6 +4,7 @@
 **/.env.*
 !.env.example
 !**/.env.example
+!**/.env.docker.example
 __pycache__/
 **/__pycache__/
 *.py[cod]
