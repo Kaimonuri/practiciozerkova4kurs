@@ -267,16 +267,16 @@
           </label>
           <label>
             Адрес
-            <input name="address" maxlength="100" required placeholder="Город, улица, дом, квартира">
+            <input name="address" maxlength="100" required placeholder="Город, улица, дом, квартира" autocomplete="off" title="Укажите адрес длиной до 100 символов">
           </label>
           <div class="form-row">
             <label>
               Дата
-              <input name="date" type="date" required>
+              <input name="date" type="date" required autocomplete="off">
             </label>
             <label>
               Телефон
-              <input name="phone" type="tel" required placeholder="8(999)123-45-67" pattern="8\([0-9]{3}\)[0-9]{3}-[0-9]{2}-[0-9]{2}">
+              <input name="phone" type="tel" required placeholder="8(999)123-45-67" pattern="8\([0-9]{3}\)[0-9]{3}-[0-9]{2}-[0-9]{2}" autocomplete="off" title="Формат: 8(999)123-45-67">
             </label>
           </div>
           <button class="button primary full" type="submit">
@@ -308,30 +308,30 @@
           <div class="form-row">
             <label>
               Фамилия
-              <input name="surname" maxlength="20" required placeholder="Иванова">
+              <input name="surname" maxlength="20" required placeholder="Иванова" pattern="[А-ЯЁ][а-яё]*(-[А-ЯЁ][а-яё]*)?" autocomplete="off" title="С заглавной русской буквы, до 20 символов">
             </label>
             <label>
               Имя
-              <input name="firstname" maxlength="20" required placeholder="Анна">
+              <input name="firstname" maxlength="20" required placeholder="Анна" pattern="[А-ЯЁ][а-яё]*(-[А-ЯЁ][а-яё]*)?" autocomplete="off" title="С заглавной русской буквы, до 20 символов">
             </label>
           </div>
           <label>
             Отчество
-            <input name="patronymic" maxlength="20" required placeholder="Сергеевна">
+            <input name="patronymic" maxlength="20" required placeholder="Сергеевна" pattern="[А-ЯЁ][а-яё]*([- ][А-ЯЁа-яё]+)*" autocomplete="off" title="Русские буквы, до 20 символов">
           </label>
           <div class="form-row">
             <label>
               Логин
-              <input name="login" maxlength="20" required placeholder="anna" autocomplete="username">
+              <input name="login" maxlength="20" required placeholder="anna" pattern="[A-Za-z]{1,20}" autocomplete="off" title="Только латинские буквы, до 20 символов">
             </label>
             <label>
               Пароль
-              <input name="password" type="password" required minlength="8" placeholder="Не менее 8 символов" autocomplete="new-password">
+              <input name="password" type="password" required minlength="8" maxlength="128" placeholder="Aa123456!" autocomplete="new-password" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[$#@!])[A-Za-z0-9$#@!]{8,128}" title="От 8 символов: заглавная и строчная латинские буквы, цифра и один из символов $#@!">
             </label>
           </div>
           <label>
             Адрес
-            <input name="address" maxlength="100" required placeholder="Город, улица, дом">
+            <input name="address" maxlength="100" required placeholder="Город, улица, дом" autocomplete="off" title="Укажите адрес длиной до 100 символов">
           </label>
           <label class="check">
             <input name="consent" type="checkbox" required>

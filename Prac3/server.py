@@ -4,15 +4,23 @@ from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 from urllib.parse import urlsplit
 import base64
+import ipaddress
 import json
 import mimetypes
 import os
 import re
 import secrets
+import ssl
 
 import psycopg
+from cryptography.fernet import Fernet
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 from psycopg.errors import UniqueViolation
 
 ROOT = Path(__file__).resolve().parent
@@ -21,10 +29,11 @@ if ENV_FILE.exists():
     for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             key, value = line.split("=", 1)
-            if key in {"DATABASE_URL", "ADMIN_LOGIN", "ADMIN_PASSWORD", "HTTPS"}:
+            if key in {"DATABASE_URL", "ADMIN_LOGIN", "ADMIN_PASSWORD", "HTTPS", "DATA_ENCRYPTION_KEY"}:
                 os.environ.setdefault(key, value)
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8000"))
+REDIRECT_PORT = int(os.environ.get("REDIRECT_PORT", "0"))
 DATABASE_URL = os.environ.get("DATABASE_URL")
 DB_HOST = os.environ.get("DB_HOST")
 HTTPS = os.environ.get("HTTPS", "0") == "1"
@@ -35,6 +44,18 @@ NAME_RE = re.compile(r"^[А-ЯЁ][а-яё]*(?:-[А-ЯЁ][а-яё]*)?$")
 PATRONYMIC_RE = re.compile(r"^[А-ЯЁ][а-яё]*(?:(?:-| )[А-ЯЁа-яё]+)*$")
 LOGIN_RE = re.compile(r"^[A-Za-z]{1,20}$")
 PHONE_RE = re.compile(r"^8\(\d{3}\)\d{3}-\d{2}-\d{2}$")
+DATA_KEY = os.environ.get("DATA_ENCRYPTION_KEY")
+FERNET = Fernet(DATA_KEY.encode()) if DATA_KEY else None
+
+
+def encrypt(value):
+    if not FERNET:
+        raise RuntimeError("Set DATA_ENCRYPTION_KEY for personal data encryption")
+    return "enc:" + FERNET.encrypt(value.encode()).decode()
+
+
+def decrypt(value):
+    return FERNET.decrypt(value[4:].encode()).decode() if value.startswith("enc:") else value
 
 
 def db():
@@ -71,9 +92,9 @@ def init_db():
         with conn.cursor() as cur:
             cur.execute("""CREATE TABLE IF NOT EXISTS users (
                 id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                surname VARCHAR(20) NOT NULL, firstname VARCHAR(20) NOT NULL,
-                patronymic VARCHAR(20) NOT NULL, login VARCHAR(20) NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL, address VARCHAR(100) NOT NULL,
+                surname TEXT NOT NULL, firstname TEXT NOT NULL,
+                patronymic TEXT NOT NULL, login VARCHAR(20) NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL, address TEXT NOT NULL,
                 is_admin BOOLEAN NOT NULL DEFAULT FALSE,
                 consent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -85,11 +106,20 @@ def init_db():
             cur.execute("""CREATE TABLE IF NOT EXISTS orders (
                 id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                service TEXT NOT NULL, address VARCHAR(100) NOT NULL,
-                visit_date DATE NOT NULL, phone VARCHAR(16) NOT NULL,
+                service TEXT NOT NULL, address TEXT NOT NULL,
+                visit_date DATE NOT NULL, phone TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'Новая',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )""")
+            for table, columns in {
+                "users": ("surname", "firstname", "patronymic", "address"),
+                "orders": ("address", "phone"),
+            }.items():
+                for column in columns:
+                    cur.execute(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TEXT")
+                    cur.execute(f"SELECT id, {column} FROM {table} WHERE {column} NOT LIKE 'enc:%'")
+                    for row_id, value in cur.fetchall():
+                        cur.execute(f"UPDATE {table} SET {column}=%s WHERE id=%s", (encrypt(value), row_id))
             cur.execute("DELETE FROM sessions WHERE expires_at <= now()")
             admin_login = os.environ.get("ADMIN_LOGIN")
             admin_password = os.environ.get("ADMIN_PASSWORD")
@@ -99,8 +129,8 @@ def init_db():
                     cur.execute("""INSERT INTO users
                         (surname, firstname, patronymic, login, password_hash, address, is_admin)
                         VALUES (%s,%s,%s,%s,%s,%s,TRUE)""",
-                        ("Администратор", "Сайта", "Служебный", admin_login,
-                         password_hash(admin_password), "Служебная запись"))
+                        (encrypt("Администратор"), encrypt("Сайта"), encrypt("Служебный"), admin_login,
+                         password_hash(admin_password), encrypt("Служебная запись")))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -181,7 +211,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/api/me":
             user = self.user()
-            self.respond(200, {"user": {"login": user[1], "firstname": user[2], "is_admin": user[3]} if user else None})
+            self.respond(200, {"user": {"login": user[1], "firstname": decrypt(user[2]), "is_admin": user[3]} if user else None})
             return
         if path == "/api/orders":
             user = self.user()
@@ -198,7 +228,13 @@ class Handler(BaseHTTPRequestHandler):
                             FROM orders WHERE user_id=%s ORDER BY id DESC LIMIT 100""", (user[0],))
                     rows = cur.fetchall()
             keys = ("id", "service", "address", "date", "phone", "status", "login") if user[3] else ("id", "service", "address", "date", "phone", "status")
-            self.respond(200, {"orders": [dict(zip(keys, row)) for row in rows]})
+            orders = []
+            for row in rows:
+                order = dict(zip(keys, row))
+                order["address"] = decrypt(order["address"])
+                order["phone"] = decrypt(order["phone"])
+                orders.append(order)
+            self.respond(200, {"orders": orders})
             return
         if path == "/":
             path = "/index.html"
@@ -267,7 +303,8 @@ class Handler(BaseHTTPRequestHandler):
                     cur.execute("""INSERT INTO users
                         (surname,firstname,patronymic,login,password_hash,address)
                         VALUES (%s,%s,%s,%s,%s,%s) RETURNING id""",
-                        (surname, firstname, patronymic, login, password_hash(password), address))
+                        (encrypt(surname), encrypt(firstname), encrypt(patronymic), login,
+                         password_hash(password), encrypt(address)))
                     user_id = cur.fetchone()[0]
         except UniqueViolation:
             self.respond(409, {"error": "Логин уже занят"})
@@ -282,7 +319,7 @@ class Handler(BaseHTTPRequestHandler):
                 cur.execute("SELECT id,login,firstname,is_admin,password_hash FROM users WHERE login=%s", (login,))
                 row = cur.fetchone()
         if not row or not password_valid(password, row[4]):
-            self.respond(401, {"error": "Неверный логин или пароль"})
+            self.respond(401, {"error": "Логин или пароль некорректен"})
             return
         self.start_session(*row[:4])
 
@@ -292,7 +329,7 @@ class Handler(BaseHTTPRequestHandler):
             with conn.cursor() as cur:
                 cur.execute("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (%s,%s,%s)",
                             (sha256(token.encode()).hexdigest(), user_id, datetime.now(timezone.utc) + timedelta(days=7)))
-        self.respond(200, {"user": {"login": login, "firstname": firstname, "is_admin": is_admin}},
+        self.respond(200, {"user": {"login": login, "firstname": decrypt(firstname), "is_admin": is_admin}},
                      self.cookie_value(token, 604800))
 
     def logout(self):
@@ -318,7 +355,8 @@ class Handler(BaseHTTPRequestHandler):
         with db() as conn:
             with conn.cursor() as cur:
                 cur.execute("""INSERT INTO orders(user_id,service,address,visit_date,phone)
-                    VALUES (%s,%s,%s,%s,%s) RETURNING id""", (user[0], service, address, visit_date, phone))
+                    VALUES (%s,%s,%s,%s,%s) RETURNING id""",
+                    (user[0], service, encrypt(address), visit_date, encrypt(phone)))
                 order_id = cur.fetchone()[0]
         self.respond(201, {"id": order_id, "status": "Новая"})
 
@@ -340,9 +378,62 @@ class Handler(BaseHTTPRequestHandler):
         self.respond(200, {"ok": True})
 
 
+class RedirectHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(308)
+        self.send_header("Location", f"https://127.0.0.1:{PORT}{self.path}")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def do_POST(self):
+        self.send_error(403, "Use HTTPS")
+
+
+def local_tls_context():
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+    now = datetime.now(timezone.utc)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=1))
+        .not_valid_after(now + timedelta(days=30))
+        .add_extension(x509.SubjectAlternativeName([
+            x509.DNSName("localhost"),
+            x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
+        ]), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+    cert_path = Path("/tmp/cleaning.crt")
+    key_path = Path("/tmp/cleaning.key")
+    cert_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.TraditionalOpenSSL,
+        serialization.NoEncryption(),
+    ))
+    key_path.chmod(0o600)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert_path, key_path)
+    return context
+
+
 if __name__ == "__main__":
     if not DATABASE_URL and not DB_HOST:
         raise SystemExit("Set DATABASE_URL or DB_HOST for PostgreSQL connection")
+    if not FERNET:
+        raise SystemExit("Set DATA_ENCRYPTION_KEY for personal data encryption")
     init_db()
-    print(f"Open http://{HOST}:{PORT}")
-    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+    if HTTPS:
+        if REDIRECT_PORT:
+            redirect_server = ThreadingHTTPServer((HOST, REDIRECT_PORT), RedirectHandler)
+            Thread(target=redirect_server.serve_forever, daemon=True).start()
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+        server.socket = local_tls_context().wrap_socket(server.socket, server_side=True)
+    else:
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+    print(f"Open {'https' if HTTPS else 'http'}://{HOST}:{PORT}")
+    server.serve_forever()

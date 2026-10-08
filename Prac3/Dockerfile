@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.14-alpine
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server.py index.html style.css app.js ./
 
-RUN useradd --create-home --uid 10001 appuser
+RUN adduser -D -u 10001 appuser
 USER appuser
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -15,6 +15,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HOST=0.0.0.0 \
     PORT=8000
 
-EXPOSE 8000
+EXPOSE 8000 8443
 
 CMD ["python", "server.py"]

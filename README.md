@@ -11,7 +11,7 @@
 
 | Проект | Что реализовано | Где смотреть |
 |---|---|---|
-| **ЧистоДома** | Сайт клининговой компании: регистрация, вход, заявки, PostgreSQL, заголовки безопасности и защищённые cookie; сайт и БД запускаются в Docker | [Код](Prac3) · [Запуск в Docker](Prac3/README.md) · [Методы HTTP](Prac3/PROTOCOLS.md) |
+| **ЧистоДома** | Сайт клининговой компании: регистрация, вход, заявки, PostgreSQL, HTTPS, шифрование персональных данных, заголовки безопасности и защищённые cookie; сайт и БД запускаются в Docker | [Код](Prac3) · [Запуск в Docker](Prac3/README.md) · [Методы HTTP](Prac3/PROTOCOLS.md) |
 | **CORS** | Три локальных веб-приложения для сравнения поведения браузера до и после настройки CORS | [Код](PracCORS/cors-practice) · [Инструкция](PracCORS/cors-practice/README.md) |
 | **Аутентификация** | Регистрация и семь способов входа: cookie, сессия, одноразовая ссылка, JWT, OAuth2 и PASETO | [Код](PracAuth) · [Инструкция](PracAuth/README.md) |
 
@@ -43,6 +43,6 @@
 
 ### Безопасность «ЧистоДома»
 
-Сервер отправляет `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` и `Cross-Origin-Opener-Policy`. Сессионная cookie использует `HttpOnly` и `SameSite=Lax`; `Secure` добавляется при работе через HTTPS.
+Сервер отправляет `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` и `Cross-Origin-Opener-Policy`. Docker-запуск использует HTTPS и сессионную cookie с `HttpOnly`, `SameSite=Lax` и `Secure`.
 
 Локальные пароли хранятся в `.env`, который не загружается в репозиторий. Для настройки используется [пример файла](Prac3/.env.example).

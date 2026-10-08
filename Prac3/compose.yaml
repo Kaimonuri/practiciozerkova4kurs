@@ -5,10 +5,19 @@ services:
       POSTGRES_DB: cleaning
       POSTGRES_USER: cleaning
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env.docker}
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - cleaning_net
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cleaning -d cleaning"]
       interval: 5s
@@ -20,25 +29,41 @@ services:
     build: .
     environment:
       HOST: 0.0.0.0
-      PORT: 8000
+      PORT: 8443
+      REDIRECT_PORT: 8000
+      HTTPS: "1"
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: cleaning
-      DB_USER: cleaning
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}
+      DB_USER: cleaning_app
+      DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env.docker}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?Set DATA_ENCRYPTION_KEY in .env.docker}
       ADMIN_LOGIN: ${ADMIN_LOGIN:?Set ADMIN_LOGIN in .env.docker}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env.docker}
     ports:
       - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8443:8443"
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - cleaning_net
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test:
         - CMD
         - python
         - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"
+        - "import ssl,urllib.request; urllib.request.urlopen('https://127.0.0.1:8443/', context=ssl._create_unverified_context(), timeout=3)"
       interval: 10s
       timeout: 5s
       retries: 5
@@ -46,3 +71,7 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  cleaning_net:
+    driver: bridge

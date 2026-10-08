@@ -1,6 +1,7 @@
 from getpass import getpass
 from pathlib import Path
 import secrets
+from cryptography.fernet import Fernet
 
 import psycopg
 from psycopg import sql
@@ -43,6 +44,10 @@ def main(postgres_password=None):
                     cleaning_conn.execute(
                         "GRANT USAGE, CREATE ON SCHEMA public TO cleaning_app"
                     )
+                    for table in ("users", "sessions", "orders"):
+                        cleaning_conn.execute(sql.SQL(
+                            "ALTER TABLE IF EXISTS public.{} OWNER TO cleaning_app"
+                        ).format(sql.Identifier(table)))
             else:
                 cur.execute("CREATE DATABASE cleaning OWNER cleaning_app")
 
@@ -52,6 +57,7 @@ def main(postgres_password=None):
             f"DATABASE_URL=postgresql://cleaning_app:{role_password}@127.0.0.1:5432/cleaning",
             "ADMIN_LOGIN=Admin",
             f"ADMIN_PASSWORD={admin_password}",
+            f"DATA_ENCRYPTION_KEY={Fernet.generate_key().decode()}",
             "",
         ]),
         encoding="utf-8",
