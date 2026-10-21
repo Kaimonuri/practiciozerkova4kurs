@@ -1,0 +1,97 @@
+# ЗАЩИТА ПРИ ЗАПУСКЕ В DOCKER
+# Сайт и PostgreSQL работают в отдельных контейнерах в общей сети проекта.
+# Порты опубликованы только на 127.0.0.1, поэтому напрямую с других компьютеров не доступны.
+# Сайт подключается к базе по имени postgres, а не по порту 5433 на компьютере.
+# 8443 — HTTPS сайта, 8000 — переход на HTTPS, 5433 — подключение к базе из терминала или VS Code.
+# Секреты подставляются из .env.docker, этот файл нельзя публиковать.
+# Сайт работает обычным пользователем appuser, файловая система контейнера только для чтения.
+# В /tmp разрешены временные файлы; cap_drop и no-new-privileges ограничивают привилегии.
+# Лимиты памяти, CPU и процессов сдерживают расход ресурсов, но не защищают от всех DoS-атак.
+# Том postgres_data сохраняет базу после пересоздания контейнера. Том не является резервной копией.
+# Healthcheck проверяет работоспособность, а не отсутствие уязвимостей.
+# Запуск сайта и PostgreSQL в Docker. Секреты передаются из .env.docker.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cleaning
+      POSTGRES_USER: cleaning
+      # Пароли берём из .env.docker, отдельно для базы и сайта.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env.docker}
+    # База доступна с этого компьютера по 127.0.0.1, наружу порт не открываем.
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - cleaning_net
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cleaning -d cleaning"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build: .
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8443
+      REDIRECT_PORT: 8000
+      # Включаем HTTPS, защищённую cookie и HSTS.
+      HTTPS: "1"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: cleaning
+      # Подключаем сайт отдельным пользователем, без прав суперпользователя.
+      DB_USER: cleaning_app
+      DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env.docker}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?Set DATA_ENCRYPTION_KEY in .env.docker}
+      ADMIN_LOGIN: ${ADMIN_LOGIN:?Set ADMIN_LOGIN in .env.docker}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env.docker}
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8443:8443"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cleaning_net
+    # Ограничиваем память, процессор и число процессов. От частых запросов нужна отдельная защита.
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    # Запрещаем запись в файлы контейнера. Временные файлы храним в /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Убираем лишние привилегии и запрещаем их повышение.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import ssl,urllib.request; urllib.request.urlopen('https://127.0.0.1:8443/', context=ssl._create_unverified_context(), timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+# Отдельная сеть для сайта и базы. Доступ в интернет у контейнеров остаётся.
+networks:
+  cleaning_net:
+    driver: bridge
